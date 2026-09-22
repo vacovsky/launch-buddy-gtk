@@ -1,0 +1,21 @@
+<interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+        <arg name="interface" type="s" direction="in"/>
+        <arg name="property" type="s" direction="in"/>
+        <arg name="value" type="v" direction="out"/>
+    </method>
+    <method name="Set">
+        <arg name="interface" type="s" direction="in"/>
+        <arg name="property" type="s" direction="in"/>
+        <arg name="value" type="v" direction="in"/>
+    </method>
+    <method name="GetAll">
+        <arg name="interface" type="s" direction="in"/>
+        <arg name="props" type="a{sv}" direction="out"/>
+    </method>
+    <signal name="PropertiesChanged">
+        <arg name="interface" type="s"/>
+        <arg name="changed" type="a{sv}"/>
+        <arg name="invalidated" type="as"/>
+    </signal>
+</interface>
