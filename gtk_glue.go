@@ -111,7 +111,7 @@ var (
 	gtkFileDialogNew                func() uintptr
 	gtkFileDialogSetTitle           func(uintptr, string)
 	gtkFileDialogSetModal           func(uintptr, uintptr)
-	gtkFileDialogOpen               func(uintptr, uintptr, uintptr, uintptr)
+	gtkFileDialogOpen               func(uintptr, uintptr, uintptr, uintptr, uintptr)
 	gtkFileOpenFinish               func(uintptr, uintptr, uintptr) uintptr // symbol: gtk_file_dialog_open_finish
 )
 

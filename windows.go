@@ -380,8 +380,12 @@ func (s *settingsWindow) restoreChanged(n int32) {
 	s.app.save()
 }
 
-// browse opens a modal file picker. gtk_file_dialog_open is a GTask: its
-// ready callback (source, task, user_data) is invoked on the GTK main thread,
+// browse opens a modal file picker. gtk_file_dialog_open's C signature (GTK
+// 4.10+) is (dialog, parent window, cancellable, ready_callback, user_data)
+// — exactly five parameters, per gtk/gtkfiledialog.h. All five must be passed
+// explicitly: passing four leaves the ready_callback register holding
+// garbage, which GTK invokes as a function pointer (SIGSEGV inside open()).
+// The ready callback (source, task, user_data) fires on the GTK main thread,
 // so it may touch the entry directly.
 func (s *settingsWindow) browse(parent Widget) {
 	dlg := Widget(gtkFileDialogNew())
@@ -399,7 +403,7 @@ func (s *settingsWindow) browse(parent Widget) {
 		}
 	})
 	retainCallback(cb)
-	gtkFileDialogOpen(uintptr(dlg), 0, uintptr(cb), 0)
+	gtkFileDialogOpen(uintptr(dlg), uintptr(parent), 0, uintptr(cb), 0)
 }
 
 // firstPath reads the first char* out of a char** returned by the file dialog.
