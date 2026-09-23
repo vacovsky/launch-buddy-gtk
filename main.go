@@ -19,10 +19,13 @@ package main
 // fight this process's godbus service for org.launchbuddy.Gnome.
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	dbus "github.com/godbus/dbus/v5"
 )
@@ -43,10 +46,12 @@ type app struct {
 	out     *outputWindow
 	setting *settingsWindow
 
-	exePath string
-	exeDir  string
-	iconDir string
-	loop    MainLoop
+	exePath     string
+	exeDir      string
+	iconDir     string
+	iconStopped string
+	iconRunning string
+	loop        MainLoop
 
 	shut bool // shutdown ran (quit or post-loop cleanup)
 }
@@ -73,10 +78,15 @@ func (a *app) ScriptPath() string { return a.s.ScriptPath }
 
 // IconPath is the absolute path of the brain PNG for the given state. The
 // extension treats a leading "/" IconName as a file icon (Gio.FileIcon).
+//
+// The file names are content-addressed (hash of the embedded PNG bytes): the
+// appindicator extension re-renders a file icon only when its path changes
+// (Gio.FileIcon equality is by URI), so rewriting the same path in place on
+// relaunch would leave the panel showing the old pixels forever.
 func (a *app) IconPath(running bool) string {
-	name := "brain-stopped.png"
+	name := a.iconStopped
 	if running {
-		name = "brain-running.png"
+		name = a.iconRunning
 	}
 	return filepath.Join(a.iconDir, name)
 }
@@ -141,18 +151,23 @@ func main() {
 	if err := os.MkdirAll(iconDir, 0o755); err != nil {
 		log.Fatalf("config dir: %v", err)
 	}
-	writeIcon(iconDir, "brain-stopped.png", iconBrainStopped)
-	writeIcon(iconDir, "brain-running.png", iconBrainRunning)
+	iconStopped := "brain-stopped-" + iconHash(iconBrainStopped) + ".png"
+	iconRunning := "brain-running-" + iconHash(iconBrainRunning) + ".png"
+	writeIcon(iconDir, iconStopped, iconBrainStopped)
+	writeIcon(iconDir, iconRunning, iconBrainRunning)
+	pruneIcons(iconDir, iconStopped, iconRunning)
 
 	setting := LoadSettings()
 	runtimeRunning := LoadRunningState()
 
 	a := &app{
-		pm:      &ProcessManager{},
-		s:       &setting,
-		exePath: exePath,
-		exeDir:  exeDir,
-		iconDir: iconDir,
+		pm:          &ProcessManager{},
+		s:           &setting,
+		exePath:     exePath,
+		exeDir:      exeDir,
+		iconDir:     iconDir,
+		iconStopped: iconStopped,
+		iconRunning: iconRunning,
 	}
 	a.out = newOutputWindow(a)
 	a.setting = newSettingsWindow(a)
@@ -200,8 +215,37 @@ func main() {
 	a.shutdown()
 }
 
+func iconHash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// writeIcon writes the icon bytes to the given path.
 func writeIcon(dir, name string, data []byte) {
 	if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
 		log.Printf("icons: %s: %v", name, err)
+	}
+}
+
+// pruneIcons removes obsolete brain icon files from the config icon dir:
+// legacy fixed names from before content addressing, and hashed names that
+// are not in use (an old build with different icon bytes).
+func pruneIcons(dir string, kept ...string) {
+	keep := make(map[string]bool, len(kept))
+	for _, n := range kept {
+		keep[n] = true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, "brain-") || keep[n] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, n)); err != nil {
+			log.Printf("icons: prune %s: %v", n, err)
+		}
 	}
 }
